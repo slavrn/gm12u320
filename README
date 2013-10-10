@@ -1,0 +1,22 @@
+What is this:
+	- Linux kernel driver for Grain Media GM12U320 based devices (primarily Acer C120 projector, but there may be compatible devices)
+
+Supported devices:
+	- Acer C120 pico-projector
+	- Any other GM12U320 based device (if you have one non-listed here - please contact me (e-mail below)
+
+Features:
+	- Generic framebuffer kernel driver - may be used with mplayer, X-server, etc.
+	- Supports resolution 854x480 pixels
+	- Provides smooth playback with insensible latency even on USB2.0
+	- Supports brightness control through standard backlight-control kernel interface
+	- Supports several devices connected simultaneously
+	- Double buffering scheme
+
+For installation details refer to INSTALL
+
+For usage details refer to USAGE
+
+For any feedback (testers are welcome!) contact me: <slavrn@yandex.ru>
+
+P.S. If you've got GM12U320 based device (e.g. USB3.0 projector), but this driver doesn't work for you, let me know

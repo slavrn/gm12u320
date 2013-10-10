@@ -1,0 +1,25 @@
+Here is installation description suitable for Debian 7.0 distribution. The procedure for other distros may vary.
+
+1. Make sure you've installed kernel headers package (usually named linux-headers)
+
+2. Compile the module:
+> make all
+
+Note: the following actions must be done with root privileges.
+
+3. Install the module:
+> make modules_install
+
+Note that Acer C120 provides USB mass storage interface, so it can be grabbed by generic usb-storage driver.
+This will prevent GM12U320 driver from loading. To force GM12U320 driver loading follow this way:
+
+4. In the directory /etc/modprobe.d/ create file gm12u320.conf with the following line:
+install usb-storage /sbin/modprobe --ignore-install gm12u320 && /sbin/modprobe --ignore-install usb-storage
+
+5. OK, now we need to modify initramfs image in the same way. Add the following line to /etc/initramfs-tools/modules:
+gm12u320
+
+6. Now trigger rebuild of initramfs:
+update-initramfs -u
+
+It's done, have fun!

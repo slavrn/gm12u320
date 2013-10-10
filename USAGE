@@ -1,0 +1,7 @@
+How to clone X server screen:
+1. Install mplayer and ffmpeg packages.
+2. Use "fbclone" script from this package, run it with no arguments to get help.
+
+How to play video with mplayer:
+1. Install mplayer package first.
+2. Use "fbplay", run it with no arguments to get help.

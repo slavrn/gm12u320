@@ -1,0 +1,15 @@
+#!/bin/bash
+#
+VIDEO=$1
+FBDEV=$2
+if [ ${VIDEO}x == x ]; then
+echo "Video player script for GM12U320 based devices"
+echo "Usage: $0 {/path/to/video_file} [/path/to/fb_device]"
+echo "If no fb_device provided, /dev/fb1 assumed by default"
+echo "Example: $0 /home/myname/video.avi /dev/fb1"
+exit 0
+fi
+if [ ${FBDEV}x == x ]; then
+FBDEV=/dev/fb1
+fi
+mplayer -vo fbdev:${FBDEV} -fs -vf dsize=854:480:2,scale=0:0 ${VIDEO}
