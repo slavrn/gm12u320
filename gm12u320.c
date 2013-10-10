@@ -9,7 +9,7 @@
 #define DRIVER_NAME		"gm12u320"
 #define DRIVER_DESC		"Driver for GM12U320-based video projectors"
 #define DRIVER_AUTHOR	"Viacheslav Nurmekhamitov <slavrn@yandex.ru>"
-#define DRIVER_VERSION	"0.1"
+#define DRIVER_VERSION	"1.0"
 
 #define VENDOR_ID_ACER_C120		0x1de1
 #define PRODUCT_ID_ACER_C120	0xc102
@@ -35,6 +35,8 @@
 #define DATA_LAST_BLOCK_SIZE		DATA_BLOCK_HEADER_SIZE + \
 							DATA_LAST_BLOCK_RAW_SIZE + DATA_BLOCK_FOOTER_SIZE
 #define DATA_BLOCK_COUNT			20
+
+#define FRAME_COUNT 2
 
 #define CMD_SIZE		31
 #define CMD_CYCLE		DATA_BLOCK_COUNT
@@ -142,8 +144,8 @@ struct gm12u320_dev {
 	struct usb_device *udev;
 	struct fb_info *info;
 	struct backlight_device *bl;
-	struct urb *cmd_data_urb[DATA_BLOCK_COUNT];
-	struct urb *data_urb[DATA_BLOCK_COUNT];
+	struct urb *cmd_data_urb[FRAME_COUNT][DATA_BLOCK_COUNT];
+	struct urb *data_urb[FRAME_COUNT][DATA_BLOCK_COUNT];
 	struct urb *cmd_draw_urb;
 	struct urb *read_urb;
 	struct urb *bl_urb;
@@ -156,6 +158,8 @@ struct gm12u320_dev {
 	struct semaphore in_use;
 	struct semaphore bl_sem;
 	atomic_t current_cmd; /* 0-19 = data cmds, 20 = draw cmd, neg = error */
+	atomic_t current_frame;
+	atomic_t next_frame;
 	atomic_t usb_ref_cnt;
 	atomic_t virtual;
 	atomic_t brightness;
@@ -265,6 +269,8 @@ static int gm12u320_probe(struct usb_interface *interface, const struct usb_devi
 	INIT_WORK(&dev->cycle_work, gm12u320_cycle);
 	INIT_DELAYED_WORK(&dev->free_work, gm12u320_free_work);
 	atomic_set(&dev->current_cmd, CMD_CYCLE);
+	atomic_set(&dev->current_frame, 0);
+	atomic_set(&dev->next_frame, 0);
 	atomic_set(&dev->usb_ref_cnt, 0);
 	atomic_set(&dev->virtual, 0);
 	atomic_set(&dev->brightness, BRIGHTNESS_UNKNOWN);
@@ -447,25 +453,26 @@ static int gm12u320_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 
 static void gm12u320_usb_free(struct gm12u320_dev *dev)
 {
-	int i;
+	int i, k;
 	int block_size;
 
+	for (k = 0; k < FRAME_COUNT; k++)
 	for (i = 0; i < DATA_BLOCK_COUNT; i++) {
 		if (i == DATA_BLOCK_COUNT - 1) /* Last block */
 			block_size = DATA_LAST_BLOCK_SIZE;
 		else
 			block_size = DATA_BLOCK_SIZE;
 		/* Free data command URBs */
-		if (dev->cmd_data_urb[i]) {
-			if (dev->cmd_data_urb[i]->transfer_buffer) usb_free_coherent(dev->udev, CMD_SIZE,
-					dev->cmd_data_urb[i]->transfer_buffer, dev->cmd_data_urb[i]->transfer_dma);
-			usb_free_urb(dev->cmd_data_urb[i]);
+		if (dev->cmd_data_urb[k][i]) {
+			if (dev->cmd_data_urb[k][i]->transfer_buffer) usb_free_coherent(dev->udev, CMD_SIZE,
+					dev->cmd_data_urb[k][i]->transfer_buffer, dev->cmd_data_urb[k][i]->transfer_dma);
+			usb_free_urb(dev->cmd_data_urb[k][i]);
 		}
 		/* Free data block URBs */
-		if (dev->data_urb[i]) {
-			if (dev->data_urb[i]->transfer_buffer) usb_free_coherent(dev->udev, block_size,
-						dev->data_urb[i]->transfer_buffer, dev->data_urb[i]->transfer_dma);
-		 	usb_free_urb(dev->data_urb[i]);
+		if (dev->data_urb[k][i]) {
+			if (dev->data_urb[k][i]->transfer_buffer) usb_free_coherent(dev->udev, block_size,
+						dev->data_urb[k][i]->transfer_buffer, dev->data_urb[k][i]->transfer_dma);
+		 	usb_free_urb(dev->data_urb[k][i]);
 		}
 	}
 	/* Free draw command URB */
@@ -501,13 +508,14 @@ static void gm12u320_usb_free(struct gm12u320_dev *dev)
 
 static int gm12u320_usb_alloc(struct gm12u320_dev *dev, struct usb_device *udev)
 {
-	int i;
+	int i, k;
 	int block_size;
 	int last_block;
 	char *buf;
 	dev->udev = udev;
 
 	/* Prepare data command and data block URBs */
+	for (k = 0; k < FRAME_COUNT; k++)
 	for (i = 0; i < DATA_BLOCK_COUNT; i++) {
 		if (i == DATA_BLOCK_COUNT - 1) {/* Last block */
 			last_block = 1;
@@ -518,28 +526,28 @@ static int gm12u320_usb_alloc(struct gm12u320_dev *dev, struct usb_device *udev)
 			block_size = DATA_BLOCK_SIZE;
 		}
 		/* Prepare data command URB */
-		dev->cmd_data_urb[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->cmd_data_urb[i]) goto err;
-		buf = usb_alloc_coherent(dev->udev, CMD_SIZE, GFP_KERNEL, &dev->cmd_data_urb[i]->transfer_dma);
+		dev->cmd_data_urb[k][i] = usb_alloc_urb(0, GFP_KERNEL);
+		if (!dev->cmd_data_urb[k][i]) goto err;
+		buf = usb_alloc_coherent(dev->udev, CMD_SIZE, GFP_KERNEL, &dev->cmd_data_urb[k][i]->transfer_dma);
 		if (!buf) goto err;
 		memcpy(buf, cmd_data, CMD_SIZE);
 		/* Commands are made from template, increment data counters */
 		buf[20] = 0xfc - i * 4;
-		buf[21] = i;
-		usb_fill_bulk_urb(dev->cmd_data_urb[i], dev->udev, usb_sndbulkpipe(dev->udev, DATA_SND_EPT),
+		buf[21] = i | (k << 7);
+		usb_fill_bulk_urb(dev->cmd_data_urb[k][i], dev->udev, usb_sndbulkpipe(dev->udev, DATA_SND_EPT),
 													buf, CMD_SIZE, gm12u320_cmd_write_complete, dev);
 		if (last_block) {/* The last data block is less than the others */
 			buf[8] = 0x28;
 			buf[9] = 0x10;
 		}
 		/* Prepare data block URB */
-		dev->data_urb[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->data_urb[i]) goto err;
-		buf = usb_alloc_coherent(dev->udev, block_size, GFP_KERNEL, &dev->data_urb[i]->transfer_dma);
+		dev->data_urb[k][i] = usb_alloc_urb(0, GFP_KERNEL);
+		if (!dev->data_urb[k][i]) goto err;
+		buf = usb_alloc_coherent(dev->udev, block_size, GFP_KERNEL, &dev->data_urb[k][i]->transfer_dma);
 		if (!buf) goto err;
 		memcpy(buf, last_block ? data_last_block_header : data_block_header, DATA_BLOCK_HEADER_SIZE);
 		memcpy(buf + block_size - DATA_BLOCK_FOOTER_SIZE, data_block_footer, DATA_BLOCK_FOOTER_SIZE);
-		usb_fill_bulk_urb(dev->data_urb[i], dev->udev, usb_sndbulkpipe(dev->udev, DATA_SND_EPT),
+		usb_fill_bulk_urb(dev->data_urb[k][i], dev->udev, usb_sndbulkpipe(dev->udev, DATA_SND_EPT),
 												buf, block_size, gm12u320_cmd_write_complete, dev);
 	}
 	/* Prepare draw command URB */
@@ -609,9 +617,11 @@ static void gm12u320_cmd_read_complete(struct urb *urb)
 static void gm12u320_update_frame(struct gm12u320_dev *dev)
 {
 	int i;
+	int frame = !atomic_read(&dev->current_frame);
 	for (i = 0; i < DATA_BLOCK_COUNT; i++)
-		memcpy(dev->data_urb[i]->transfer_buffer + DATA_BLOCK_HEADER_SIZE, dev->info->screen_base + DATA_BLOCK_RAW_SIZE * i,
+		memcpy(dev->data_urb[frame][i]->transfer_buffer + DATA_BLOCK_HEADER_SIZE, dev->info->screen_base + DATA_BLOCK_RAW_SIZE * i,
 												i == DATA_BLOCK_COUNT - 1 ? DATA_LAST_BLOCK_RAW_SIZE : DATA_BLOCK_RAW_SIZE);
+	atomic_set(&dev->next_frame, frame);
 	/* To avoid unlimited semaphore incrementing */
 	(void)down_trylock(&dev->sync_sem);
 	up(&dev->sync_sem);
@@ -622,6 +632,7 @@ static void gm12u320_cycle(struct work_struct *work)
 	struct gm12u320_dev *dev = container_of(work, struct gm12u320_dev, cycle_work);
 	int ret = 0;
 	int current_cmd = atomic_read(&dev->current_cmd);
+	int frame = atomic_read(&dev->current_frame);
 
 	if (current_cmd < 0) return; /* Error state - exiting */
 
@@ -631,6 +642,8 @@ static void gm12u320_cycle(struct work_struct *work)
 		if (0 > atomic_read(&dev->current_cmd)) return;
 		atomic_sub(CMD_CYCLE, &dev->current_cmd); /* Reset command counter */
 		current_cmd = 0;
+		frame = atomic_read(&dev->next_frame);
+		atomic_set(&dev->current_frame, frame);
 	}
 	else {
 		atomic_add(1, &dev->current_cmd);
@@ -639,14 +652,14 @@ static void gm12u320_cycle(struct work_struct *work)
 	if (current_cmd < DATA_BLOCK_COUNT) {
 		/* Send data command to device */
 		atomic_add(1, &dev->usb_ref_cnt);
-		ret = usb_submit_urb(dev->cmd_data_urb[current_cmd], GFP_KERNEL);
+		ret = usb_submit_urb(dev->cmd_data_urb[frame][current_cmd], GFP_KERNEL);
 		if (ret) {
 			atomic_sub(1, &dev->usb_ref_cnt);
 			goto err;
 		}
 		/* Send data block to device */
 		atomic_add(1, &dev->usb_ref_cnt);
-		ret = usb_submit_urb(dev->data_urb[current_cmd], GFP_KERNEL);
+		ret = usb_submit_urb(dev->data_urb[frame][current_cmd], GFP_KERNEL);
 		if (ret) {
 			atomic_sub(1, &dev->usb_ref_cnt);
 			goto err;
