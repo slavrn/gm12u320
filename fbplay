@@ -12,4 +12,4 @@ fi
 if [ ${FBDEV}x == x ]; then
 FBDEV=/dev/fb1
 fi
-mplayer -vo fbdev:${FBDEV} -fs -vf dsize=854:480:2,scale=0:0 ${VIDEO}
+mplayer -vo fbdev:"${FBDEV}" -fs -vf dsize=854:480:2,scale=0:0 "${VIDEO}"

@@ -4,6 +4,7 @@ XRES=$1
 YRES=$2
 DSTXRES=854
 DSTYRES=480
+FBDEV=$3
 if [ ${YRES}x == x ]; then
 echo "X-server screen clone script for GM12U320 based devices"
 echo "Usage: $0 {X-res} {Y-res} [/path/to/fb_device]"
@@ -12,10 +13,13 @@ echo "If no fb_device provided, /dev/fb1 assumed by default"
 echo "Example: $0 1024 768 /dev/fb1"
 exit 0
 fi
+if [ ${FBDEV}x == x ]; then
+FBDEV=/dev/fb1
+fi
 if [ $(( XRES * DSTYRES > DSTXRES * YRES )) -eq 1 ] ; then
 DSTYRES=$(( DSTXRES * YRES / XRES ))
 else
 DSTXRES=$(( DSTYRES * XRES / YRES ))
 fi
 echo $DSTXRES $DSTYRES
-ffmpeg -s ${XRES}x${YRES} -r 25 -f x11grab -i :0.0 -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s ${DSTXRES}x${DSTYRES} - | mplayer -demuxer rawvideo -rawvideo w=${DSTXRES}:h=${DSTYRES}:format=bgr24 -vo fbdev:/dev/fb1 -
+ffmpeg -s ${XRES}x${YRES} -r 25 -f x11grab -i :0.0 -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s ${DSTXRES}x${DSTYRES} - | mplayer -demuxer rawvideo -rawvideo w=${DSTXRES}:h=${DSTYRES}:format=bgr24 -vo fbdev:"${FBDEV}" -
