@@ -244,6 +244,7 @@ static int gm12u320_probe(struct usb_interface *interface, const struct usb_devi
 	struct gm12u320_dev *dev = 0;
 	struct fb_info *info = 0;
 	int ret = 0;
+	struct backlight_properties props;
 	/* GM12U320 provides 2 interfaces: data and ctl. Proceed for data
 						interface probes only - ignore control interface probes. */
 	if (DATA_IFACE_NUM != interface->cur_altsetting->desc.bInterfaceNumber)
@@ -278,6 +279,18 @@ static int gm12u320_probe(struct usb_interface *interface, const struct usb_devi
 	sema_init(&dev->in_use, 1);
 	sema_init(&dev->bl_sem, 1);
 
+	/* Init backlight control */
+	memset(&props, 0, sizeof(props));
+	props.type = BACKLIGHT_PLATFORM;
+	props.max_brightness = BRIGHTNESS_AUTO;
+	props.brightness = BRIGHTNESS_AUTO;
+	dev->bl = backlight_device_register(DRIVER_NAME, NULL, dev, &gm12u320_backlight_ops, &props);
+	if (IS_ERR(dev->bl)) {
+		pr_err("gm12u320: Backlight init error: 0x%lx", PTR_ERR(dev->bl));
+		ret = -ENOMEM;
+		dev->bl = 0;
+		goto err;
+	}
 	if (gm12u320_bl_request(dev)) {
 		pr_err("gm12u320: Error requesting brightness");
 		ret = -EINVAL;
@@ -300,6 +313,7 @@ static int gm12u320_probe(struct usb_interface *interface, const struct usb_devi
 err:
 	if (dev) {
 		if (dev->cycle_wq) destroy_workqueue(dev->cycle_wq);
+		if (dev->bl) backlight_device_unregister(dev->bl);
 		if (info) gm12u320_fb_free(info);
 		gm12u320_usb_free(dev);
 		kfree(dev);
@@ -322,7 +336,7 @@ static void gm12u320_disconnect(struct usb_interface *interface)
 	/* Let cycle work finish its job */
 	up(&dev->sync_sem);
 	up(&dev->bl_sem);
-	destroy_workqueue(dev->cycle_wq);
+	if (dev->cycle_wq) destroy_workqueue(dev->cycle_wq);
 
 	/* Wait for USB aync requests finish */
 	for (i = 0; atomic_read(&dev->usb_ref_cnt) && i++ < 100; msleep(10));
@@ -700,7 +714,6 @@ static void gm12u320_bl_write_complete(struct urb *urb)
 
 static void gm12u320_bl_ans_complete(struct urb *urb)
 {
-	struct backlight_properties props;
 	struct gm12u320_dev *dev = (struct gm12u320_dev *) urb->context;
 	if(urb->status) {
 		atomic_sub(CMD_CYCLE * 2, &dev->current_cmd);
@@ -721,16 +734,6 @@ static void gm12u320_bl_ans_complete(struct urb *urb)
 				atomic_set(&dev->brightness, BRIGHTNESS_AUTO);
 				break;
 		}
-		/* Init backlight control */
-		memset(&props, 0, sizeof(props));
-		props.type = BACKLIGHT_PLATFORM;
-		props.max_brightness = BRIGHTNESS_AUTO;
-		props.brightness = atomic_read(&dev->brightness);
-		dev->bl = backlight_device_register(DRIVER_NAME, NULL, dev, &gm12u320_backlight_ops, &props);
-		if (IS_ERR(dev->bl)) {
-			pr_err("gm12u320: Backlight init error: 0x%lx", PTR_ERR(dev->bl));
-			dev->bl = 0;
-		}
 	}
 	atomic_sub(1, &dev->usb_ref_cnt);
 }
@@ -749,7 +752,6 @@ static void gm12u320_bl_ack_complete(struct urb *urb)
 static int gm12u320_bl_get(struct backlight_device *bl_dev)
 {
 	struct gm12u320_dev *dev = bl_get_data(bl_dev);
-pr_info("gm12u320_bl_get: %d", atomic_read(&dev->brightness));
 	return atomic_read(&dev->brightness);
 }
 
@@ -833,5 +835,5 @@ static int gm12u320_bl_request(struct gm12u320_dev *dev)
 err:
 	atomic_sub(CMD_CYCLE * 2, &dev->current_cmd);
 	pr_err("gm12u320: Error requesting brightness");
-	return 0;
+	return ret;
 }
