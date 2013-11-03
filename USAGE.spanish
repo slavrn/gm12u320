@@ -1,0 +1,10 @@
+USO
+
+Como clonar la pantalla del servidor X
+    1.- Instala los paquetes mplayer y ffmpeg
+    2.- Usar el script "fbclone" incluido en este paquete, corralo con el
+    argumento -h para obtener ayuda
+    
+Como reproducir un video con mplayer
+    1.- Instale el paquete mplayer primero.
+    2.- Use el script "fbplay", ejecutelo sin argumentos para obtener ayuda.
