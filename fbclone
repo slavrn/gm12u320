@@ -1,25 +1,62 @@
 #!/bin/bash
-#
-XRES=$1
-YRES=$2
+# fbclone
+# Autor <slavrn@yandex.ru>
+# Mod by Christopher Castro <ccastrog1000@ipn.mx>
+RES=$(xdpyinfo | sed -n 's/.*dim.* \([0-9]*x[0-9]*\) .*/\1/pg')
 DSTXRES=854
 DSTYRES=480
-FBDEV=$3
-if [ ${YRES}x == x ]; then
-echo "X-server screen clone script for GM12U320 based devices"
-echo "Usage: $0 {X-res} {Y-res} [/path/to/fb_device]"
-echo "X-res, Y-res - size of picture to be cloned, usually just screen resolution"
-echo "If no fb_device provided, /dev/fb1 assumed by default"
-echo "Example: $0 1024 768 /dev/fb1"
-exit 0
-fi
-if [ ${FBDEV}x == x ]; then
 FBDEV=/dev/fb1
-fi
+
+showHelp() {
+echo -e "X-server screen clone script for GM12U320 based devices"
+echo -e "Usage: $0 -r [resolution] -d [/path/to/fb_device]"
+echo -e "resolution - size of picture to be cloned, usually just screen resolution"
+echo -e "If no fb_device provided, /dev/fb1 assumed by default"
+echo -e "If no resolution provided, screen resolution assumed by default"
+echo -e "Example: $0 -r 1024x768 -d /dev/fb1"
+exit 0
+}
+
+while getopts 'hr:d:' OPCION
+do
+  case $OPCION in
+  r)
+        RES=$OPTARG
+        
+        continue
+	;;
+  d)	
+        FBDEV=$OPTARG
+        continue
+	;;
+  h)
+        showHelp
+	;;
+  *)
+        showHelp
+   ;;
+  esac
+done
+shift $(($OPTIND - 1))
+
+XRES=$(echo "$RES" | cut -f 1 -d x)
+YRES=$(echo "$RES" | cut -f 2 -d x)
+
 if [ $(( XRES * DSTYRES > DSTXRES * YRES )) -eq 1 ] ; then
 DSTYRES=$(( DSTXRES * YRES / XRES ))
 else
 DSTXRES=$(( DSTYRES * XRES / YRES ))
 fi
-echo $DSTXRES $DSTYRES
-ffmpeg -s ${XRES}x${YRES} -r 25 -f x11grab -i :0.0 -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s ${DSTXRES}x${DSTYRES} - | mplayer -demuxer rawvideo -rawvideo w=${DSTXRES}:h=${DSTYRES}:format=bgr24 -vo fbdev:"${FBDEV}" -
+
+
+showVideo() {
+echo $DSTXRES $DSTYRES 
+ffmpeg -s ${RES} -r 25 -f x11grab -i :0.0 -f rawvideo -vcodec rawvideo -pix_fmt bgr24 -s ${DSTXRES}x${DSTYRES} - | mplayer -demuxer rawvideo -rawvideo w=${DSTXRES}:h=${DSTYRES}:format=bgr24 -vo fbdev:"${FBDEV}" -
+}
+
+if [ -e "$FBDEV" ]; then
+    showVideo
+else
+    echo -e "Error:\t $FBDEV no exist"
+    exit 1
+fi
