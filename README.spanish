@@ -1,0 +1,34 @@
+Que es esto:
+
+    - Es el controlador para el kernel del Linux para dispositivos basados en
+    el chip Grain Media GM12U320 (al principio para el proyector Acer C120, 
+    pero podría ser compartible para otros dispositivos)
+
+Dispositivos soportados:
+    
+	- Acer C120 pico-projector
+	- Cualquier otro basado en el chip GM12U320 (Si conoces algún otro 
+	no mencionado en esta lista por favor contacteme por correo (incluido 
+	al final de este documento))
+	
+Caracteristicas:
+	- Generic framebuffer kernel driver - may be used with mplayer, X-server, etc.
+	- Controlador génerico framebuffer para el kernel - puede ser usado por
+	mplayer, X-server, etc.
+	- Soporta la resolución de 854x480 pixeles.
+	- Provee una reproducción fluida con una latencia insensible incluso
+	en USB2.0
+	- Soporta el control del brillo de acuerdo al estandar del kernel.
+	- Soporta varios dispositivos conectados al mismo tiempo.
+	- Esquema de doble búfer
+
+
+Para detalles de instalación lea INSTALL.spanish
+
+Para detalles de uso vea USAGE.spanish
+
+Para cualquier cuestion de retroalimentación  (testers son bienvenidos) 
+contactar con: <slavrn@yandex.ru>
+
+P.D. Si tienes un dispositivo basando en GM12U320 (por ejemplo un proyector
+USB3.0), pero este controlador no te es funcional, por favor hazmelo saber.
