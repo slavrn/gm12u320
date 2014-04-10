@@ -12,8 +12,9 @@ kernel-headers)
 Nota: Las siguientes acciones se deben realizar como root
     
 3.- Instalar el módulo
-    # make modules_install
-    
+    > make modules_install
+    > depmod -a
+
 Nota: Como el proyector Acer C120 provee de una interface de almacenamiento
 masivo USB, puede ser reconocida como una memoria USB.
 

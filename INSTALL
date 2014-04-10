@@ -9,6 +9,7 @@ Note: the following actions must be done with root privileges.
 
 3. Install the module:
 > make modules_install
+> depmod -a
 
 Note that Acer C120 provides USB mass storage interface, so it can be grabbed by generic usb-storage driver.
 This will prevent GM12U320 driver from loading. To force GM12U320 driver loading follow this way:
