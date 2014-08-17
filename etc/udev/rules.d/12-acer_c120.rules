@@ -1,0 +1,1 @@
+SUBSYSTEM=="graphics", ATTRS{name}=="gm12u320", GROUP:="users"
