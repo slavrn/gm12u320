@@ -23,4 +23,7 @@ gm12u320
 6. Now trigger rebuild of initramfs:
 update-initramfs -u
 
+7. Most distros wont grant the user access rights to the framebuffer device. cd /dev && ls -la | grep fb1 will show the permitted group, typically 'video'. 
+Either add the user to this group or cp over the /etc/udev/rules.d file to automatically grant any user in users access to the device.
+
 It's done, have fun!
